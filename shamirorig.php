@@ -38,68 +38,65 @@ function _rshift($integer, $n)
             }
         return $integer;
     	}
-   
- function decrypt($data) 
-      {      
-      $len = $this->degree/8;$delta = 2654435769;
-      for($i = 40 * $len - 2; $i >= 0; $i -= 2)
-        {								
-	    for($j = 0; $j < 2; $j++)
-	  	{   		    		  
-		    $vv[$j] = ($data[($i + 4 * $j) % $len] << 24) +
-		      ($data[($i + 4 * $j + 1) % $len] << 16) + 
-		      ($data[($i + 4 * $j + 2) % $len] << 8) + 
-		      ($data[($i + 4 * $j + 3) % $len]);
-	        }
-	    $sum = 3337565984 ;//0xC6EF3720;	    	    
-	    for($j = 0; $j < 32; $j++) 
-		    {
-		      $vv[1] -= $this->to32(((($vv[0] << 4) ^ $this->_rshift($vv[0], 5)) + $vv[0])^ $sum);         
-		      $sum   -= $delta;
-		      $vv[0] -= $this->to32(((($vv[1] << 4) ^ $this->_rshift($vv[1], 5)) + $vv[1])^ $sum);
-		    }		    
-	   $vv[0]&= 4294967295;$vv[1]&=4294967295;
-	   for($j = 0; $j < 2; $j++) 
-		  {
-		    $data[($i + 4 * $j + 0) % $len] = ($vv[$j] >> 24) ;
-		    $data[($i + 4 * $j + 1) % $len] = ($vv[$j] >> 16) & 0xff;
-		    $data[($i + 4 * $j + 2) % $len] = ($vv[$j] >> 8) & 0xff;
-		    $data[($i + 4 * $j + 3) % $len] = $vv[$j] & 0xff;
-		  }       	
-        }	
-      return array_reverse($data);
-      }
-
-function teadecrypt($secret)
-	{
-	  $loc1 = array_reverse(array_values(unpack("C*",gmp_export($secret))));
-	  
-	  $w=array();
-	  for ($k = 0;$k<sizeof($loc1);$k +=2)
-	  	{
-	  	if (@$loc1[$k+1])
-	  		{
-	  		$w[$k]   = $loc1[$k+1];
-	  		$w[$k+1] = $loc1[$k];
-	  		}
-	  	else $w[$k] = $loc1[$k];
-	  	}
-		  
-	  $loc1 = $this->decrypt($w);
-	  
-	  $w=array();
-	  $w[0] = $loc1[0];
-	  for ($k = 1;$k<sizeof($loc1);$k +=2)
-	  	{	  
-	  	$w[$k]   = $loc1[$k+1];
-	  	$w[$k+1] = $loc1[$k];	  
-	  	}	  	
-	  
-	  $secret = "";
-	  foreach ($w as $r) $secret.=chr($r);
-	  return $secret;	
+ 
+ function charstolong($data,$i)
+ 	{
+	$len = $this->degree/8;
+	for($j = 0; $j < 2; $j++) 
+	   {
+	   $index = $i + 4 * $j;
+	   $v[$j] = ($data[$index % $len] << 24) +
+		($data[($index + 1) % $len] << 16) + 
+		($data[($index + 2) % $len] << 8) + 
+		($data[($index + 3) % $len]);	 
+	   }
+	return $v;
+	}			
+			
+ function longtochars(&$data,$i,$long)
+ 	{	 
+	 $len = $this->degree/8; 
+	 for($j = 0; $j < 2; $j++) 
+	 	{
+		$index = $i + 4 * $j;	
+		$data[$index % $len]       = $long[$j] >> 24 ;
+		$data[($index + 1) % $len] = ($long[$j] >> 16) & 0xff;
+		$data[($index + 2) % $len] = ($long[$j] >> 8) & 0xff;
+		$data[($index + 3) % $len] = $long[$j] & 0xff;
+		}	 
 	}
-	 
+
+function field_invert($x)
+	{
+	  $v = $this->poly;
+	  $g = gmp_init(0);
+	  $z = gmp_init(1);
+	
+	  while ($x>1) 
+		  {
+		    $i = $this->sizeinbits($x) - $this->sizeinbits($v);
+		    if ($i < 0){$this->swap($x, $v);$this->swap($z, $g);$i = -$i;}
+		    $x = gmp_xor($x, $v<<$i);
+		    $z = gmp_xor($z, $g<<$i);
+		  }
+	return $z;
+	}
+
+function field_mult($x, $y)
+	{   	  
+	  if (gmp_testbit($y, 0)) 	$z = $x;
+	  else 				$z = 0;
+	  
+	  for($i = 1; $i < $this->degree; $i++) 
+		  {
+		    $x = gmp_mul($x, 2);
+		    if (gmp_testbit($x, $this->degree))$x = gmp_xor($x, $this->poly);
+		    if (gmp_testbit($y, $i)) 	       $z = gmp_xor($z, $x);
+		  }
+		  
+	  return $z;
+	}
+
 function field_init()
 	{
 	$irred_coeff = array(
@@ -133,37 +130,130 @@ function sizeinbits($A)
 	}
 
 function swap(&$a,&$b)
-	{$c=$a;$a=$b;$b=$c;}
+	{$c = $a;$a = $b;$b = $c;}
 
-function field_invert($x)
+function string_to_int($s)
+	{		
+	$output = 0;
+	foreach (str_split($s) as $char)
+        	$output = bcadd(bcmul($output , 256) ,ord($char));
+	return $output;
+    	}    
+	    
+function array_to_int($s)
+	{		
+	$output = 0;$j=sizeof($s)-1;
+	for ($k = 0;$k<sizeof($s);$k++)		
+        	$output = bcadd(bcmul(bcpow(256,$j--) , $s[$k]),$output);
+		
+	return $output;
+    	}
+	    		
+function horner($n, $x, $coeff)
 	{
-	  $v = $this->poly;
-	  $g = gmp_init(0);
-	  $z = gmp_init(1);
-	
-	  while ($x>1) 
-		  {
-		    $i = $this->sizeinbits($x) - $this->sizeinbits($v);
-		    if ($i < 0){$this->swap($x, $v);$this->swap($z, $g);$i = -$i;}
-		    $x = gmp_xor($x, $v<<$i);
-		    $z = gmp_xor($z, $g<<$i);
-		  }
-	return $z;
+	  $y = $x;
+	  for($i = $n - 1; $i; $i--) {
+	    $y = gmp_xor($y, $coeff[$i]);
+	    $y = $this->field_mult($y, $x);
+	  }
+	  $y = gmp_xor($y, $coeff[0]);
+	  return $y;
 	}
+    
+ function encrypt($data) 
+      {      
+      $len = $this->degree/8;$delta = 2654435769;
+      for($i = 0; $i < 40 * $len; $i += 2)
+        {								
+	    $v = $this->charstolong($data,$i);
+	    $sum = 0 ;//0xC6EF3720;	    	    
+	    for($j = 0; $j < 32; $j++) 
+		    {
+		      $v[0] += $this->to32(((($v[1] << 4) ^ $this->_rshift($v[1], 5)) + $v[1])^ $sum);		      
+		      $sum  += $delta;
+		      $v[1] += $this->to32(((($v[0] << 4) ^ $this->_rshift($v[0], 5)) + $v[0])^ $sum);         
+		    }		    
+	   $v[0] &= 4294967295;$v[1] &=4294967295;
+	   $this->longtochars($data,$i,$v);     	
+        }	
+      return $data;
+      }	
+      	  
+ function decrypt($data) 
+      {      
+      $len = $this->degree/8;$delta = 2654435769;
+      for($i = 40 * $len - 2; $i >= 0; $i -= 2)
+        {								
+	    $v = $this->charstolong($data,$i);	        
+	    $sum = 3337565984 ;//0xC6EF3720;	    	    
+	    for($j = 0; $j < 32; $j++) 
+		    {
+		      $v[1] -= $this->to32(((($v[0] << 4) ^ $this->_rshift($v[0], 5)) + $v[0])^ $sum);         
+		      $sum  -= $delta;
+		      $v[0] -= $this->to32(((($v[1] << 4) ^ $this->_rshift($v[1], 5)) + $v[1])^ $sum);
+		    }		    
+	   $v[0] &= 4294967295;$v[1] &=4294967295;
+	   $this->longtochars($data,$i,$v);		       	
+        }	
+      return array_reverse($data);
+      }
 
-function field_mult($x, $y)
-	{   	  
-	  if (gmp_testbit($y, 0)) 	$z = $x;
-	  else 				$z = 0;
+function process_secret(&$secret,$mode)
+	{
+	$secret = array_Reverse(array_values(unpack("C*",gmp_export($secret))));
+
+  	for ($k = 0;$k<sizeof($secret);$k +=2)	  	
+  	  	if (@$secret[$k+1])
+  	  		$this->swap($secret[$k+1],$secret[$k]);
+  	  	
+        $secret = $this->$mode($secret);
+	
+	$d = 0;
+	if ($mode == "decrypt") $d = sizeof($secret) % 2;
+	
+    	for ($k = $d;$k<sizeof($secret);$k +=2)
+	    if (@$secret[$k+1])   	  	
+    	  	$this->swap($secret[$k+1],$secret[$k]);	
+	}
+	 
+function teadecrypt($secret)
+	{
+	  $this->process_secret($secret,"decrypt");	  	
 	  
-	  for($i = 1; $i < $this->degree; $i++) 
-		  {
-		    $x = gmp_mul($x, 2);
-		    if (gmp_testbit($x, $this->degree))$x = gmp_xor($x, $this->poly);
-		    if (gmp_testbit($y, $i)) 	       $z = gmp_xor($z, $x);
-		  }
+	  $decrypted = "";
+	  foreach ($secret as $r) $decrypted .=chr($r);
+	  return $decrypted;	
+	}
+	 	    
+function polinomio_random($degree, $intercept, $upper_bound)
+	{
+    	if ($degree < 0)
+        	die('Degree must be a non-negative number.');
+    	$coefficients = [$intercept];
+    	$i = 0;
+	while ($i++<$degree)	    	
+        	$coefficients[] = gmp_random_range(0, bcsub($upper_bound,1));
+		
+    	return $coefficients;
+    	}
+	   	    	
+function split($v,$t,$n)
+	{  
+	$secret = $this->string_to_int($v);
+	      
+	$this->degree = strlen(ltrim(bin2hex(gmp_export($secret)),"0"))*4;
+	$this->poly   = $this->field_init();	
+	$this->process_secret($secret,"encrypt");
+    	  			  
+	$secret = $this->array_to_int(array_Reverse($secret));     	  
+
+  	$coeff  = $this->polinomio_random($n, $secret, $this->poly);
+
+  	$shares = [];
+  	for($i = 0; $i < $n; $i++) 
+    		$shares[] = ($i+1)."-".bin2hex(gmp_export($this->horner($t, $i+1, $coeff)));
 		  
-	  return $z;
+  	return $shares;
 	}
 
 function getmatrix(&$b)
@@ -176,7 +266,7 @@ function getmatrix(&$b)
 		    for($j = $n - 2; $j >= 0; $j--) 	    
 		      $A[$j][$i] = $this->field_mult($A[$j + 1][$i], $x);
 		    
-		    $x=$this->field_mult($x, $A[0][$i]);
+		    $x = $this->field_mult($x, $A[0][$i]);
 		    $b[$i][1] = gmp_xor($b[$i][1], $x);
 		  }
 	  return $A;
@@ -221,28 +311,36 @@ function restore_secret($shares)
 	  return $this->teadecrypt($this->field_mult($shares[$n - 1][1], $h)); 
 	}
 }
+
 /*
+
+Ejemplo de http://point-at-infinity.org/ssss/
+
 1-1c41ef496eccfbeba439714085df8437236298da8dd824
 2-fbc74a03a50e14ab406c225afb5f45c40ae11976d2b665
 3-fa1c3a9c6df8af0779c36de6c33f6e36e989d0e0b91309
 4-468de7d6eb36674c9cf008c8e8fc8c566537ad6301eb9e
 5-4756974923c0dce0a55f4774d09ca7a4865f64f56a4ee0
-*/	
+*/
+	
 $shares=array(
 "1-1c41ef496eccfbeba439714085df8437236298da8dd824",
 "2-fbc74a03a50e14ab406c225afb5f45c40ae11976d2b665",
 "3-fa1c3a9c6df8af0779c36de6c33f6e36e989d0e0b91309"
 );
 
-$ishares=array();
+$x = new shamir_original;
+
+$shares = $x->split("Supersecreto",3,5);
+
+$ishares = array();
 foreach ($shares as $share) 
 	{
-	$index=explode("-",$share);
-	$ishares[]=[$index[0],gmp_init("0x".$index[1])];
+	$index = explode("-",$share);
+	$ishares[] = [$index[0],gmp_init("0x".$index[1])];
 	}
 
-$x=new shamir_original;
- 
+array_pop($ishares);array_pop($ishares);
 echo $x->restore_secret($ishares);
 ?>
 		    
