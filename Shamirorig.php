@@ -66,6 +66,16 @@ function _rshift($integer, $n)
 		}	 
 	}
 
+function sizeinbits($A) 
+	{
+	$A = ltrim(bin2hex(gmp_export($A)),"0");
+	$B = sprintf( "%04d", decbin(hexdec($A[0])));
+	return strlen($A)*4-strpos($B,"1");
+	}
+
+function swap(&$a,&$b)
+	{$c = $a;$a = $b;$b = $c;}
+	
 function field_invert($x)
 	{
 	  $v = $this->poly;
@@ -121,33 +131,6 @@ function field_init()
 	gmp_setbit($poly, 0);
 	return $poly;
 	}
-
-function sizeinbits($A) 
-	{
-	$A = ltrim(bin2hex(gmp_export($A)),"0");
-	$B = sprintf( "%04d", decbin(hexdec($A[0])));
-	return strlen($A)*4-strpos($B,"1");
-	}
-
-function swap(&$a,&$b)
-	{$c = $a;$a = $b;$b = $c;}
-
-function string_to_int($s)
-	{		
-	$output = 0;
-	foreach (str_split($s) as $char)
-        	$output = bcadd(bcmul($output , 256) ,ord($char));
-	return $output;
-    	}    
-	    
-function array_to_int($s)
-	{		
-	$output = 0;$j=sizeof($s)-1;
-	for ($k = 0;$k<sizeof($s);$k++)		
-        	$output = bcadd(bcmul(bcpow(256,$j--) , $s[$k]),$output);
-		
-	return $output;
-    	}
 	    		
 function horner($n, $x, $coeff)
 	{
@@ -198,37 +181,39 @@ function horner($n, $x, $coeff)
       return array_reverse($data);
       }
 
-function process_secret(&$secret,$mode)
+function permuta(&$secret,$mode="encrypt")
 	{
-	$secret = array_Reverse(array_values(unpack("C*",gmp_export($secret))));
-
-  	for ($k = 0;$k<sizeof($secret);$k +=2)	  	
-  	  	if (@$secret[$k+1])
-  	  		$this->swap($secret[$k+1],$secret[$k]);
-  	  	
-        $secret = $this->$mode($secret);
-	
 	$d = 0;
 	if ($mode == "decrypt") $d = sizeof($secret) % 2;
 	
-    	for ($k = $d;$k<sizeof($secret);$k +=2)
-	    if (@$secret[$k+1])   	  	
+    	for ($k = $d;$k<sizeof($secret);$k +=2) 
+	    if (@$secret[$k+1])	
     	  	$this->swap($secret[$k+1],$secret[$k]);	
+	}
+	 
+function process_secret(&$secret,$mode)
+	{
+	$secret = array_Reverse(array_values(unpack("C*",gmp_export($secret))));
+	
+	$this->permuta($secret);
+	  	
+        $crypted = $this->$mode($secret);
+	
+	$this->permuta($crypted,$mode);	
+	
+	$secret = "";
+        foreach ($crypted as $r) $secret .=chr($r);
 	}
 	 
 function teadecrypt($secret)
 	{
 	  $this->process_secret($secret,"decrypt");	  	
 	  
-	  $decrypted = "";
-	  foreach ($secret as $r) $decrypted .=chr($r);
-	  return $decrypted;	
+	  return $secret;	
 	}
 	 	    
 function polinomio_random($degree, $intercept, $upper_bound)
 	{
-    	if ($degree < 0)
-        	die('Degree must be a non-negative number.');
     	$coefficients = [$intercept];
     	$i = 0;
 	while ($i++<$degree)	    	
@@ -237,15 +222,25 @@ function polinomio_random($degree, $intercept, $upper_bound)
     	return $coefficients;
     	}
 	   	    	
-function split($v,$t,$n)
+function split($secret,$t,$n)
 	{  
-	$secret = $this->string_to_int($v);
+	// Degree debe ser múltiplo de 32
+	
+	$temp    = $secret;								
+	$degree  = strlen(ltrim(bin2hex($secret),"0"))*4;	
+	$secret .= str_repeat("\0",($degree % 32)/8);	
+	if (strlen($temp) % 2) $secret .="\0\0";
+	
+	$this->degree = strlen(ltrim(bin2hex($secret),"0"))*4;
+	
+	if (($this->degree < 8) or ($this->degree > 1024) ) die("Max 128 caracteres, Min 64");
+	
+	$secret = gmp_import($secret);			
 	      
-	$this->degree = strlen(ltrim(bin2hex(gmp_export($secret)),"0"))*4;
 	$this->poly   = $this->field_init();	
 	$this->process_secret($secret,"encrypt");
-    	  			  
-	$secret = $this->array_to_int(array_Reverse($secret));     	  
+					    			  
+	$secret = gmp_import(strrev($secret));     	  
 
   	$coeff  = $this->polinomio_random($n, $secret, $this->poly);
 
@@ -276,6 +271,9 @@ function restore_secret($shares)
 	{  
 	  $coefs = $this->getmatrix($shares);
 	  $this->degree = strlen(ltrim(bin2hex(gmp_export($shares[0][1])),"0"))*4;
+	  
+	  echo "\nDegree $this->degree\n";
+	  
 	  $this->poly   = $this->field_init();
 	  $n = sizeof($shares);
 	  for($i = 0; $i < $n; $i++) 
@@ -313,7 +311,6 @@ function restore_secret($shares)
 }
 
 /*
-
 Ejemplo de http://point-at-infinity.org/ssss/
 
 1-1c41ef496eccfbeba439714085df8437236298da8dd824
@@ -323,12 +320,6 @@ Ejemplo de http://point-at-infinity.org/ssss/
 5-4756974923c0dce0a55f4774d09ca7a4865f64f56a4ee0
 */
 	
-$shares=array(
-"1-1c41ef496eccfbeba439714085df8437236298da8dd824",
-"2-fbc74a03a50e14ab406c225afb5f45c40ae11976d2b665",
-"3-fa1c3a9c6df8af0779c36de6c33f6e36e989d0e0b91309"
-);
-
 $x = new shamir_original;
 
 $shares = $x->split("Supersecreto",3,5);
@@ -342,5 +333,19 @@ foreach ($shares as $share)
 
 array_pop($ishares);array_pop($ishares);
 echo $x->restore_secret($ishares);
-?>
-		    
+
+$shares=array(
+"1-1c41ef496eccfbeba439714085df8437236298da8dd824",
+"2-fbc74a03a50e14ab406c225afb5f45c40ae11976d2b665",
+"3-fa1c3a9c6df8af0779c36de6c33f6e36e989d0e0b91309"
+);
+$ishares = array();
+foreach ($shares as $share) 
+	{
+	$index = explode("-",$share);
+	$ishares[] = [$index[0],gmp_init("0x".$index[1])];
+	}
+
+echo $x->restore_secret($ishares);
+
+?>		
