@@ -233,7 +233,7 @@ function split($secret,$t,$n)
 	
 	$this->degree = strlen(ltrim(bin2hex($secret),"0"))*4;
 	
-	if (($this->degree < 8) or ($this->degree > 1024) ) die("Max 128 caracteres, Min 1");
+	if (($this->degree < 64) or ($this->degree > 1024) ) die("Max 128 caracteres, Min 8");
 	
 	$secret = gmp_import($secret);			
 	      
