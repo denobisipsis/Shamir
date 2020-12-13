@@ -39,33 +39,6 @@ function _rshift($integer, $n)
         return $integer;
     	}
  
- function charstolong($data,$i)
- 	{
-	$len = $this->degree/8;
-	for($j = 0; $j < 2; $j++) 
-	   {
-	   $index = $i + 4 * $j;
-	   $v[$j] = ($data[$index % $len] << 24) +
-		($data[($index + 1) % $len] << 16) + 
-		($data[($index + 2) % $len] << 8) + 
-		($data[($index + 3) % $len]);	 
-	   }
-	return $v;
-	}			
-			
- function longtochars(&$data,$i,$long)
- 	{	 
-	 $len = $this->degree/8; 
-	 for($j = 0; $j < 2; $j++) 
-	 	{
-		$index = $i + 4 * $j;	
-		$data[$index % $len]       = $long[$j] >> 24 ;
-		$data[($index + 1) % $len] = ($long[$j] >> 16) & 0xff;
-		$data[($index + 2) % $len] = ($long[$j] >> 8) & 0xff;
-		$data[($index + 3) % $len] = $long[$j] & 0xff;
-		}	 
-	}
-
 function sizeinbits($A) 
 	{
 	$A = ltrim(bin2hex(gmp_export($A)),"0");
@@ -142,14 +115,35 @@ function horner($n, $x, $coeff)
 	  $y = gmp_xor($y, $coeff[0]);
 	  return $y;
 	}
-    
+
+ function charstolong($data,$i)
+ 	{
+	$len = $this->degree/8;$long = array(0,0);	   
+	for ($k=0;$k<4;$k++) 
+		{
+		$long[0] += $data[($i+$k)   % $len] << (8*(3-$k));
+		$long[1] += $data[($i+4+$k) % $len] << (8*(3-$k));
+		}		
+	return $long;
+	}			
+			
+ function longtochars(&$data,$i,$long)
+ 	{	 
+	$len = $this->degree/8; 		
+	for ($k=0;$k<4;$k++) 
+		{
+		$data[($i+$k)   % $len] = ($long[0] >> (8*(3-$k))) & 0xff;
+		$data[($i+4+$k) % $len] = ($long[1] >> (8*(3-$k))) & 0xff;
+		}	 
+	}
+	    
  function encrypt($data) 
       {      
       $len = $this->degree/8;$delta = 2654435769;
       for($i = 0; $i < 40 * $len; $i += 2)
         {								
 	    $v = $this->charstolong($data,$i);
-	    $sum = 0 ;//0xC6EF3720;	    	    
+	    $sum = 0 ;	    	    
 	    for($j = 0; $j < 32; $j++) 
 		    {
 		      $v[0] += $this->to32(((($v[1] << 4) ^ $this->_rshift($v[1], 5)) + $v[1])^ $sum);		      
@@ -181,7 +175,7 @@ function horner($n, $x, $coeff)
       return array_reverse($data);
       }
 
-function permuta(&$secret,$mode="encrypt")
+function permuta(&$secret,$mode = "encrypt")
 	{
 	$d = 0;
 	if ($mode == "decrypt") $d = sizeof($secret) % 2;
@@ -196,7 +190,7 @@ function process_secret(&$secret,$mode)
 	$secret = array_Reverse(array_values(unpack("C*",gmp_export($secret))));
 	
 	$this->permuta($secret);
-	  	
+		
         $crypted = $this->$mode($secret);
 	
 	$this->permuta($crypted,$mode);	
@@ -233,7 +227,7 @@ function split($secret,$t,$n)
 	
 	$this->degree = strlen(ltrim(bin2hex($secret),"0"))*4;
 	
-	if (($this->degree < 64) or ($this->degree > 1024) ) die("Max 128 caracteres, Min 8");
+	if (($this->degree < 8) or ($this->degree > 1024) ) die("Max 128 caracteres, Min 64");
 	
 	$secret = gmp_import($secret);			
 	      
