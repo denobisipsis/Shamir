@@ -1,6 +1,8 @@
 <?
 /*
 http://point-at-infinity.org/ssss/
+
+original with horner and xtea decryption
 */	 
 class shamir_original
 {
