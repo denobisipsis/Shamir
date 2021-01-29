@@ -1,4 +1,4 @@
-<? 
+<?php
 /*
 #Implementation of Shamir Secret Sharing Scheme
 
@@ -80,212 +80,264 @@ Determine the value of the reconstructed polynomial for x = 0, i.e. calculate P'
 
 class Shamir
 {
-var $printable,$primos,$BASE;
 
-function __construct()
-    	{
-	/*
-	set of printable characters to convert numbers
-	*/
-	
-	$p=array(48,49,50,51,52,53,54,55,56,57,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,58,59,60,61,62,63,64,91,92,93,94,95,96,123,124,125,126,32,9,10,13,11,12);  
- 
-  	$this->BASE = 100;
-	  
-	$printable=[];
-				
-	for ($k=0;$k<$this->BASE;$k++) 
-			$printable[] = chr($p[$k]);
+	public $printable;
+	public $primos;
+	public $BASE;
+
+	function __construct()
+	{
+		/*
+		set of printable characters to convert numbers
+		*/
+
+		$p = [
+			48,49,50,51,52,53,54,55,56,57,97,98,99,100,101,102,103,104,105,106,107,108,109,110,
+			111,112,113,114,115,116,117,118,119,120,121,122,65,66,67,68,69,70,71,72,73,74,75,76,77,78,
+			79,80,81,82,83,84,85,86,87,88,89,90,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,58,59,60,
+			61,62,63,64,91,92,93,94,95,96,123,124,125,126,32,9,10,13,11,12
+		];  
+
+		$this->BASE = 100;
 			
-	$this->printable = $printable;
-	
-	# Construimos una lista de primos
-	
-	$P128 = bcadd(bcpow(2,128,0) , 51);
-	$P257 = bcadd(bcpow(2,256,0) , 297);
-	$P321 = bcadd(bcpow(2,320,0) , 27);
-	$P385 = bcadd(bcpow(2,384,0) , 231);    
-	$primos = array_merge(array($P128,$P257,$P321,$P385),Shamir::primos_Mersenne());   
-	sort($primos);
-	
-	$this->primos = $primos;
-	}
-	    
-function primos_Mersenne()
-    {
-    // Calcula todos los primos de Mersenne menores de 500 dígitos 
-
-    $mersenne_prime_exponents = [
-        2, 3, 5, 7, 13, 17, 19, 31, 61, 89, 107, 127, 521, 607, 1279, 2203, 2281, 3217, 4253
-    ];
-    $primos = [];
-    foreach ($mersenne_prime_exponents as $exp)
-        $primos[] = bcsub(bcpow(2,$exp),1);
-    return $primos;
-    }
-
-function primo_suficiente($shares)
-    {
-    /*
-    encuentra un primo mayor que todos los shares
-    
-    The set of integers
-    modulo a prime number p forms a field in which interpolation 
-    is possible
-    */
-    
-    foreach ($this->primos as $primo)
-        {
-	$greater = 0;
-		        
-    	foreach ($shares as $i)		 		    	
-		if ($i[1] > $primo) {$greater = 1;break;}
+		$printable = [];
 					
-    	if (!$greater)
-            	return $primo;
-	}	
-    return;
-    }
+		for ($k=0; $k < $this->BASE; $k++) {
 
-function string_to_int($s)
-	{		
-	$output = 0;
-	foreach (str_split($s) as $char)
-        	$output = bcadd(bcmul($output , $this->BASE) , array_search($char,$this->printable));
-	return $output;
-    	}
-	         
-function string_from_int($f)
-	{	
-        $chars = "";
-	while ($f>0)
-		{
-	    	$chars.=$this->printable[bcmod($f , $this->BASE)];
-		$f = bcdiv($f,$this->BASE,0);
-	    	}
-	    	
-	return strrev($chars);
+			$printable[] = chr($p[$k]);
+		}
+
+		$this->printable = $printable;
+
+		# Construimos una lista de primos
+
+		$P128 = bcadd(bcpow(2,128,0) , 51);
+		$P257 = bcadd(bcpow(2,256,0) , 297);
+		$P321 = bcadd(bcpow(2,320,0) , 27);
+		$P385 = bcadd(bcpow(2,384,0) , 231);    
+		$primos = array_merge(array($P128,$P257,$P321,$P385), Shamir::primos_Mersenne());   
+		sort($primos);
+
+		$this->primos = $primos;
+	}
+	    
+	static function primos_Mersenne()
+	{
+		// Calcula todos los primos de Mersenne menores de 500 dígitos 
+
+		$mersenne_prime_exponents = [
+			2, 3, 5, 7, 13, 17, 19, 31, 61, 89, 107, 127, 521, 607, 1279, 2203, 2281, 3217, 4253
+		];
+
+		$primos = [];
+
+		foreach ($mersenne_prime_exponents as $exp) {
+
+			$primos[] = bcsub(bcpow(2,$exp),1);
+		}
+
+		return $primos;
 	}
 
-function polinomio_random($degree, $intercept, $upper_bound)
+	function primo_suficiente($shares)
 	{
-    	if ($degree < 0)
-        	die('Degree must be a non-negative number.');
-    	$coefficients = [$intercept];
-    	$i = 0;
-	while ($i++<$degree)	    	
-        	$coefficients[] = gmp_random_range(0, bcsub($upper_bound,1));
-		
-    	return $coefficients;
-    	}
-    
-function puntos_del_polinomio($coefficients, $np, $primo)
-	{
-	/*
-	Calcula los primeros n puntos del polinomio [ (1, f(1)), (2, f(2)), ... (n, f(n)) ]
-	empieza con x=1 y calcula el valor de y
-	calcula cada término & súmalo a y usando matemática modular 
-	añade el punto a la lista 
-	*/
-    	$points = [];
-    	foreach (range(1, $np+1) as $x)
-	    	{ 
-        	$y = $coefficients[0];
-        	foreach (range(1, sizeof($coefficients)-1) as $i)
-			{
-	            	$exponentiation = bcmod(bcpow($x,$i) , $primo);
-	            	$term = bcmod(bcmul($coefficients[$i] , $exponentiation) , $primo);
-	            	$y = bcmod(bcadd($y , $term) , $primo);
+		/*
+		encuentra un primo mayor que todos los shares
+
+		The set of integers
+		modulo a prime number p forms a field in which interpolation 
+		is possible
+		*/
+
+		foreach ($this->primos as $primo) {
+
+			$greater = 0;
+					
+			foreach ($shares as $i) {
+
+				if ($i[1] > $primo) {
+
+					$greater = 1;
+					break;
+				}
+							
+				if (!$greater) {
+
+					return $primo;
+				}
 			}
-        	$points[] = [$x, $y];
+
+			return;
 		}
-    	return $points;
-    	}
-         
-function secret_int_to_points($secret_int, $pt, $np)
+	}
+
+	function string_to_int($s) 
 	{
-    	//  Captura los puntos de intersección de un polinomio aleatorio en y igual al secreto.
 
-	    if ($pt < 2)
-	        die("Threshold must be >= 2.");
-	    if ($pt > $np)
-	        die("Threshold must be < the total number of points.");
-	    $primo = Shamir::primo_suficiente([[$np,$secret_int]]);
-	    if (!$primo)
-	        die("Error! Secret is too long for share calculation!");
+		$output = 0;
 
-	    $coefficients = Shamir::polinomio_random($pt-1, $secret_int, $primo);
-	    $points       = Shamir::puntos_del_polinomio($coefficients, $np, $primo);
-	    
-	    return $points;
-    	}
+		foreach (str_split($s) as $char) {
+
+			$output = bcadd(bcmul($output, $this->BASE) , array_search($char, $this->printable));
+		}
+
+		return $output;
+	}
 	         
-function point_to_share_string($point)
-	{			    
-	[$x, $y] = $point;
-	
-	$x_string = Shamir::string_from_int($x);
-	$y_string = bin2hex(gmp_export($y));
-	
-	$share_string = "$x_string".'-'."$y_string";
-	return $share_string;
-    	}
-     
-function recover_secret($shares) 
+	function string_from_int($f) 
 	{
-	  $primo = $this->primo_suficiente($shares);
-	  
-	  for ($formula = $accum = 0; $formula < sizeof($shares); $formula++) 
-	  {
-	    /* 
-	    Multiplicar los numeradores por encima y los denominadores or debajo para hacer la interpolación Lagrange
-	    */
-	    
-	    for ($count = 0, $numerator = $denominator = 1; $count < sizeof($shares); $count++) 
-	    {
-	      if ($formula == $count) continue; 
-	      $start = $shares[$formula][0];
-	      $next  = $shares[$count][0];
-	      $numerator = ($numerator * -$next) % $primo;
-	      $denominator = ($denominator * ($start - $next)) % $primo;
-	    }
-	    $value = $shares[$formula][1];
-	    $accum = bcmod(bcadd($primo , bcadd($accum , bcmul(bcmul($value , $numerator) , gmp_invert($denominator,$primo)))), $primo);
-	  }
-	  return Shamir::string_from_int($accum);
+
+		$chars = "";
+		
+		while ($f>0) {
+
+			$chars .= $this->printable[bcmod($f , $this->BASE)];
+			$f = bcdiv($f, $this->BASE, 0);
+		}
+				
+		return strrev($chars);
+	}
+
+	function polinomio_random($degree, $intercept, $upper_bound)
+	{
+		if ($degree < 0) {
+
+			die('Degree must be a non-negative number.');
+		}
+		
+		$coefficients = [$intercept];
+		$i = 0;
+
+		while ($i++<$degree) {	 
+
+				$coefficients[] = gmp_random_range(0, bcsub($upper_bound,1));
+		}
+
+		return $coefficients;
+	}
+    
+	function puntos_del_polinomio($coefficients, $np, $primo)
+	{
+		/*
+		Calcula los primeros n puntos del polinomio [ (1, f(1)), (2, f(2)), ... (n, f(n)) ]
+		empieza con x=1 y calcula el valor de y
+		calcula cada término & súmalo a y usando matemática modular 
+		añade el punto a la lista 
+		*/
+		$points = [];
+		foreach (range(1, $np+1) as $x) {
+
+			$y = $coefficients[0];
+
+			foreach (range(1, sizeof($coefficients)-1) as $i) {
+					$exponentiation = bcmod(bcpow($x,$i) , $primo);
+					$term = bcmod(bcmul($coefficients[$i] , $exponentiation) , $primo);
+					$y = bcmod(bcadd($y , $term) , $primo);
+			}
+
+			$points[] = [$x, $y];
+		}
+
+		return $points;
+	}
+         
+	function secret_int_to_points($secret_int, $pt, $np)
+	{
+		//  Captura los puntos de intersección de un polinomio aleatorio en y igual al secreto.
+
+		if ($pt < 2) {
+
+			die("Threshold must be >= 2.");
+		}
+
+		if ($pt > $np) {
+
+			die("Threshold must be < the total number of points.");
+		}
+
+		$primo = Shamir::primo_suficiente([[$np,$secret_int]]);
+
+		if (!$primo) {
+
+			die("Error! Secret is too long for share calculation!");
+		}
+
+		$coefficients = Shamir::polinomio_random($pt-1, $secret_int, $primo);
+		$points       = Shamir::puntos_del_polinomio($coefficients, $np, $primo);
+		
+		return $points;
+	}
+	         
+	function point_to_share_string($point)
+	{			    
+		[$x, $y] = $point;
+		$x_string = $this->string_from_int($x);
+		$y_string = bin2hex(gmp_export($y));
+		$share_string = "$x_string".'-'."$y_string";
+
+		return $share_string;
+	}
+     
+	function recover_secret($shares) 
+	{
+		$primo = $this->primo_suficiente($shares);
+
+		for ($formula = $accum = 0; $formula < sizeof($shares); $formula++) {
+			/* 
+			Multiplicar los numeradores por encima y los denominadores or debajo para hacer la interpolación Lagrange
+			*/
+			
+			for ($count = 0, $numerator = $denominator = 1; $count < sizeof($shares); $count++) {
+
+				if ($formula == $count) continue; 
+
+				$start = $shares[$formula][0];
+				$next  = $shares[$count][0];
+				$numerator = ($numerator * -$next) % $primo;
+				$denominator = ($denominator * ($start - $next)) % $primo;
+			}
+
+			$value = $shares[$formula][1];
+			$accum = bcmod(bcadd($primo , bcadd($accum , bcmul(bcmul($value , $numerator) , gmp_invert($denominator,$primo)))), $primo);
+		}
+
+		return $this->string_from_int($accum);
 	}
      	    
-function create_shares($secret_string, $s, $n)
+	function create_shares($secret_string, $s, $n)
 	{
 	// Trocea el secreto convertido a integer en shares (pares de coordenadas x,y) 
-	
-        $secret_int = Shamir::string_to_int($secret_string);
-        $points     = Shamir::secret_int_to_points($secret_int, $s, $n-1);
-        $shares     = array();
-	
-        foreach ($points as $point)
-            $shares[] = Shamir::point_to_share_string($point);
-   
-        return $shares;
+
+		$secret_int = Shamir::string_to_int($secret_string);
+		$points     = Shamir::secret_int_to_points($secret_int, $s, $n-1);
+		$shares     = array();
+
+		foreach ($points as $point) {
+
+			$shares[] = Shamir::point_to_share_string($point);
+		}
+
+		return $shares;
 	}
 }
 
 
-$x=new Shamir();
+$x = new Shamir();
 
 // genera 5 shares con un Threshold de 3
 
-$shares=$x->create_shares("Supersecreto", 3, 5);
+$shares = $x->create_shares("Supersecreto", 3, 5);
 
 var_Dump($shares);
 
 // Prepara los shares a recuperar
 
-$oshare= [];
-foreach ($shares as $share)
-	{
-	$share=explode("-",$share);
-	$oshare[]=[(int)$share[0],gmp_init("0x".$share[1])];	
-	}
+$oshare = [];
+
+foreach ($shares as $share) {
+
+	$share = explode("-",$share);
+	$oshare[] = [(int)$share[0],gmp_init("0x".$share[1])];	
+}
 	
 echo $x->recover_secret($oshare);exit;
